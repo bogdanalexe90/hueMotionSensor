@@ -138,7 +138,7 @@ private Map getTemperatureResultEvent(BigDecimal newTemp) {
     return createEvent([
         name: "temperature",
         value: newTemp,
-        descriptionText: "{{ device.displayName }} was {{ value} }°",
+        descriptionText: "{{ device.displayName }} was {{ value }}°",
         unit: getTemperatureScale(),
         translatable: true
 	])
