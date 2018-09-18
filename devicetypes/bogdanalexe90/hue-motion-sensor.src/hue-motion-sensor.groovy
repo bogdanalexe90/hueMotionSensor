@@ -67,7 +67,7 @@ metadata {
 		}
        
         valueTile("illuminance", "device.illuminance", inactiveLabel: false, width: 2, height: 2) {
-			state "luminosity", label:'${currentValue} ${unit}', unit:"lux"
+			state "luminosity", label:'${currentValue} lux', unit:"lux"
 		}
         
         valueTile("battery", "device.battery", decoration: "flat", inactiveLabel: false, width: 2, height: 2) {
@@ -83,7 +83,6 @@ metadata {
 	}
 }
 
-
 private Map getBatteryResultEvent(BigDecimal newVolts) {
 	if (newVolts == 0 || newVolts == 255) {
     	return [:]
@@ -97,7 +96,7 @@ private Map getBatteryResultEvent(BigDecimal newVolts) {
     Map batteryEventResult = [
     	name: "battery",
         value: currBatteryPercent,
-        descriptionText: "{{ device.displayName }} battery was {{ value }}",
+        descriptionText: "{{ device.displayName }} battery was {{ value }}%",
         unit: "%",
         translatable: true
     ]
@@ -157,7 +156,7 @@ private Map getLuminanceResultEvent(Integer newIlluminance) {
 	return createEvent([
         name: "illuminance",
         value: newIlluminance,
-        descriptionText: "{{ device.displayName }} was {{ value }}",
+        descriptionText: "{{ device.displayName }} was {{ value }} lux",
         unit: "lux",
         translatable: true
 	])
