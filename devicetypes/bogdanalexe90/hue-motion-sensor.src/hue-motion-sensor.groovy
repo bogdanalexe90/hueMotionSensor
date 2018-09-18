@@ -24,10 +24,7 @@ metadata {
 		capability "Temperature Measurement"
         capability "Illuminance Measurement"
 		capability "Refresh"
-		capability "Health Check"
 		capability "Sensor"
-        
-        command "enrollResponse"
 
 		fingerprint profileId: "0104", inClusters: "0000,0001,0003,0406,0400,0402", outClusters: "0019", manufacturer: "Philips", model: "SML001", deviceJoinName: "Hue Motion Sensor"
 	}
@@ -173,19 +170,6 @@ private Map getMotionResultEvent(String newMotionAction) {
 	])
 }
 
-private sendCheckIntervalEvent(Long value) {
-	sendEvent(
-    	name: "checkInterval",
-        value: value, 
-        displayed: false,
-        data: [
-        	protocol: "zigbee",
-        	hubHardwareId: device.hub.hardwareID, 
-        	offlinePingable: "1"
-        ]
-    )
-}
-
 
 def parse(String description) {
     log.info "Parse description: $description"
@@ -213,7 +197,6 @@ def parse(String description) {
         	if (descMap.commandInt == 0x07) {
             	if (descMap.data[0] == "00") {
 					log.debug "Temperature reporting config response: $descMap"
-                    sendCheckIntervalEvent(60 * 12)
 				} else {
 					log.warn "Temperature reporting config failed - error code: ${descMap.data[0]}"
 				}
@@ -227,7 +210,6 @@ def parse(String description) {
         	if (descMap.commandInt == 0x07) {
             	if (descMap.data[0] == "00") {
 					log.debug "Illuminance reporting config response: $descMap"
-					sendCheckIntervalEvent(60 * 12)
 				} else {
 					log.warn "Illuminance reporting config failed - error code: ${descMap.data[0]}"
 				}
@@ -262,10 +244,6 @@ def refresh() {
 
 def configure() {
 	log.info "### Configure"
-	// Device-Watch allows 2 check-in misses from device + ping (plus 1 min lag time)
-	// enrolls with default periodic reporting until newer 5 min interval is confirmed
-	sendCheckIntervalEvent(2 * 60 * 60 + 1 * 60)
-
 	def configCmds = []
 
 	// reporting interval if no activity
@@ -277,9 +255,4 @@ def configure() {
     configCmds += zigbee.batteryConfig()
 
 	return refresh() + configCmds + refresh() // send refresh cmd as part of config
-}
-
-def ping() {
-	log.info "### Ping"
-    return zigbee.readAttribute(zigbee.POWER_CONFIGURATION_CLUSTER, 0x0020)
 }
