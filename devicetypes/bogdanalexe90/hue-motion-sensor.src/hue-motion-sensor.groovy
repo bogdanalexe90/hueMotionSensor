@@ -13,6 +13,7 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  */
+import physicalgraph.zigbee.clusters.iaszone.ZoneStatus
 import physicalgraph.zigbee.zcl.DataType
  
  
@@ -25,8 +26,9 @@ metadata {
         capability "Illuminance Measurement"
 		capability "Refresh"
 		capability "Sensor"
+        capability "Health Check"
 
-		fingerprint profileId: "0104", inClusters: "0000,0001,0003,0406,0400,0402", outClusters: "0019", manufacturer: "Philips", model: "SML001", deviceJoinName: "Hue Motion Sensor"
+		fingerprint profileId: "0104", inClusters: "0000,0001,0003,0406,0400,0402,0500", outClusters: "0019", manufacturer: "Philips", model: "SML001", deviceJoinName: "Hue Motion Sensor"
 	}
     
     preferences {
@@ -141,14 +143,21 @@ private Map getTemperatureResultEvent(BigDecimal newTemp) {
 }
 
 private Map getLuminanceResultEvent(Integer newIlluminance) {
-	newIlluminance = zigbee.lux(newIlluminance)
+	def lastMotionEvent = device.currentState("motion").date.getTime()
+	def timeSinceLastMotion = ((new Date()).getTime() - lastMotionEvent) / 1000
+    newIlluminance = zigbee.lux(newIlluminance)
+    
+    if (timeSinceLastMotion < 1.5) {
+    	log.debug "Skiping update illuminance value: $newIlluminance - Time since last motion event: $timeSinceLastMotion sec"
+    	return [:]
+    }
     
     // Apply configured offset
     if (luxOffset) {
     	newIlluminance = newIlluminance + (luxOffset as Integer)
     }
 
-	log.debug "Updating illuminance value: $newIlluminance"
+	log.debug "Updating illuminance value: $newIlluminance - Time since last motion event: $timeSinceLastMotion sec"
     
 	return createEvent([
         name: "illuminance",
@@ -170,9 +179,17 @@ private Map getMotionResultEvent(String newMotionAction) {
 	])
 }
 
+private convertZoneStatusToMotionResult (ZoneStatus zs) {
+	getMotionResultEvent((zs.isAlarm1Set() || zs.isAlarm2Set()) ? "active" : "inactive") 
+}
+
 
 def parse(String description) {
     log.info "Parse description: $description"
+    
+    if (description?.startsWith("zone status")) {
+    	return convertZoneStatusToMotionResult(zigbee.parseZoneStatus(description))
+    }
     
 	if (description?.startsWith("temperature")) {
     	return getTemperatureResultEvent((description - "temperature: ") as BigDecimal)
@@ -197,6 +214,7 @@ def parse(String description) {
         	if (descMap.commandInt == 0x07) {
             	if (descMap.data[0] == "00") {
 					log.debug "Temperature reporting config response: $descMap"
+                    sendEvent(name: "checkInterval", value: 60 * 12, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
 				} else {
 					log.warn "Temperature reporting config failed - error code: ${descMap.data[0]}"
 				}
@@ -210,6 +228,7 @@ def parse(String description) {
         	if (descMap.commandInt == 0x07) {
             	if (descMap.data[0] == "00") {
 					log.debug "Illuminance reporting config response: $descMap"
+                    sendEvent(name: "checkInterval", value: 60 * 12, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
 				} else {
 					log.warn "Illuminance reporting config failed - error code: ${descMap.data[0]}"
 				}
@@ -217,6 +236,13 @@ def parse(String description) {
             	return getLuminanceResultEvent(descMap.value ? zigbee.convertHexToInt(descMap.value) : 0)
             }         
         break;
+        
+        // Zone status event
+        case zigbee.IAS_ZONE_CLUSTER:
+        	if (descMap.attrInt == zigbee.ATTRIBUTE_IAS_ZONE_STATUS && descMap.value) {
+	            return convertZoneStatusToMotionResult(new ZoneStatus(zigbee.convertToInt(descMap.value))) 
+            }
+        break
         
         // Motion event
         case 0x0406:
@@ -229,14 +255,23 @@ def parse(String description) {
     return [:]
 }
 
+/**
+ * PING is used by Device-Watch in attempt to reach the Device
+ * */
+def ping() {
+	log.info "### Ping"
+	zigbee.readAttribute(zigbee.IAS_ZONE_CLUSTER, zigbee.ATTRIBUTE_IAS_ZONE_STATUS)
+}
+
 def refresh() {
 	log.info "### Refresh"
 	def refreshCmds = []
 
 	refreshCmds += zigbee.readAttribute(zigbee.POWER_CONFIGURATION_CLUSTER, 0x0020) +
     	zigbee.readAttribute(zigbee.TEMPERATURE_MEASUREMENT_CLUSTER, 0x0000) +
-        zigbee.readAttribute(0x0400, 0x0000) +
+		zigbee.readAttribute(zigbee.IAS_ZONE_CLUSTER, zigbee.ATTRIBUTE_IAS_ZONE_STATUS) +
         zigbee.readAttribute(0x0406, 0x0000) +
+		zigbee.readAttribute(0x0400, 0x0000) +
 		zigbee.enrollResponse()
 
 	return refreshCmds
@@ -245,6 +280,10 @@ def refresh() {
 def configure() {
 	log.info "### Configure"
 	def configCmds = []
+    
+    // Device-Watch allows 2 check-in misses from device + ping (plus 1 min lag time)
+	// enrolls with default periodic reporting until newer 5 min interval is confirmed
+	sendEvent(name: "checkInterval", value: 2 * 60 * 60 + 1 * 60, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
 
 	// reporting interval if no activity
 	// temperature - minReportTime 10 seconds, maxReportTime 5 min
