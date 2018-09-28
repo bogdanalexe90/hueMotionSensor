@@ -13,9 +13,7 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  */
-import physicalgraph.zigbee.clusters.iaszone.ZoneStatus
 import physicalgraph.zigbee.zcl.DataType
- 
  
 metadata {
     definition (name: "Hue Motion Sensor", namespace: "bogdanalexe90", author: "Bogdan Alexe") {
@@ -33,7 +31,7 @@ metadata {
     
     preferences {
 	    section {
-			input "motionDuration", "number", title: "Motion duration in seconds", description: "Default value is 10s",  range: "10..*", displayDuringSetup: false
+			input "motionDuration", "number", title: "Motion duration in seconds", description: "Default value is 10s",  range: "0..*", displayDuringSetup: false
 		}
         
         section {
@@ -196,6 +194,19 @@ private Integer convertMotionSensitivityToInt (String sensitivity) {
     return 2
 }
 
+private String convertIntToMotionSensitivity (Integer sensitivity) {
+    if (sensitivity == 0) {
+        return "Low"
+    }
+
+    if (sensitivity == 1) {
+        return "Medium"
+    }
+    
+    // High
+    return "High"
+}
+
 
 def parse(String description) {
     log.info "Parse description: $description"
@@ -259,6 +270,14 @@ def parse(String description) {
             
             if (descMap.attrInt == 0x0000) {
 				return getMotionResultEvent(descMap.value == "01" ? "active" : "inactive")
+            }  
+            
+            if (descMap.attrInt == 0x0010) {
+				log.info "Motion duration is ${zigbee.convertHexToInt(descMap.value)} sec"
+            }  
+            
+            if (descMap.attrInt == 0x0030) {
+				log.info "Motion sensitivity is ${convertIntToMotionSensitivity(zigbee.convertHexToInt(descMap.value))}"
             }       
         break;
     }
@@ -278,17 +297,13 @@ def refresh() {
 	log.info "### Refresh"
 	def refreshCmds = []
 
-	// Battery
 	refreshCmds += zigbee.readAttribute(zigbee.POWER_CONFIGURATION_CLUSTER, 0x0020)
-    // Temp
-    refreshCmds += 	zigbee.readAttribute(zigbee.TEMPERATURE_MEASUREMENT_CLUSTER, 0x0000)
-    // Motion
-	refreshCmds += 	zigbee.readAttribute(zigbee.IAS_ZONE_CLUSTER, zigbee.ATTRIBUTE_IAS_ZONE_STATUS)
-    refreshCmds +=  zigbee.readAttribute(0x0406, 0x0000)
-    
-    // Illuminance
-	refreshCmds += 	zigbee.readAttribute(0x0400, 0x0000)
-	refreshCmds += 	zigbee.enrollResponse()
+    refreshCmds += zigbee.readAttribute(zigbee.TEMPERATURE_MEASUREMENT_CLUSTER, 0x0000)
+    refreshCmds += zigbee.readAttribute(0x0406, 0x0000)
+	refreshCmds += zigbee.readAttribute(0x0406, 0x0010)
+    refreshCmds += zigbee.readAttribute(0x0406, 0x0030, [mfgCode: 0x100b])
+	refreshCmds += zigbee.readAttribute(0x0400, 0x0000)
+	refreshCmds += zigbee.enrollResponse()
 
 	return refreshCmds
 }
@@ -306,10 +321,9 @@ def configure() {
     //    - illuminance - minReportTime 5 seconds, maxReportTime 5 min
 	//    - battery - minReport 30 seconds, maxReportTime 6 hrs by default    
 	configCmds += zigbee.temperatureConfig(30, 300)
+    configCmds += zigbee.configureReporting(0x0406, 0x0000, DataType.BITMAP8, 0, 300, null)
     configCmds += zigbee.configureReporting(0x0400, 0x0000, DataType.UINT16, 5, 300, 0x0064)
     configCmds += zigbee.batteryConfig()
-    configCmds += zigbee.iasZoneConfig()
-    
     // Cofigure motion sensitivity to `High` and duration to default
     configCmds += zigbee.writeAttribute(0x0406, 0x0010, DataType.UINT16, 0)
     configCmds += zigbee.writeAttribute(0x0406, 0x0030, DataType.UINT8, convertMotionSensitivityToInt("High"), [mfgCode: 0x100b])
@@ -324,7 +338,7 @@ def updated () {
    
     // Configure motion duration
     if (state.lastMotionDuration != motionDuration) {
-    	log.debug "Updating motion duration - $motionDuration sec"
+    	log.debug "Updating motion duration - ${motionDuration ?: "default"} sec"
     	sendHubCommand(zigbee.writeAttribute(0x0406, 0x0010, DataType.UINT16, motionDuration ?: 0).collect{new physicalgraph.device.HubAction(it)}) 
     }
     
