@@ -313,6 +313,8 @@ def configure() {
     // Cofigure motion sensitivity to `High` and duration to default
     configCmds += zigbee.writeAttribute(0x0406, 0x0010, DataType.UINT16, 0)
     configCmds += zigbee.writeAttribute(0x0406, 0x0030, DataType.UINT8, convertMotionSensitivityToInt("High"), [mfgCode: 0x100b])
+    state.lastMotionDuration = null
+    state.lastMotionSensitivity = "High"
 
 	return refresh() + configCmds + refresh() // send refresh cmd as part of config
 }
@@ -327,7 +329,7 @@ def updated () {
     }
     
     // Configure motion sensitivity
-    if (state.lastMotionSensitivity != motionSensitivity) {
+    if (state.lastMotionSensitivity != (motionSensitivity ?: "High")) {
     	log.debug "Updating motion sensitivity - $motionSensitivity"
 	    sendHubCommand(zigbee.writeAttribute(0x0406, 0x0030, DataType.UINT8, convertMotionSensitivityToInt(motionSensitivity), [mfgCode: 0x100b]).collect{new physicalgraph.device.HubAction(it)}) 
     }
@@ -345,7 +347,7 @@ def updated () {
     }
     
     state.lastMotionDuration = motionDuration
-    state.lastMotionSensitivity = motionSensitivity
+    state.lastMotionSensitivity = motionSensitivity ?: "High"
     state.lastTempOffset = tempOffset
     state.lastLuxOffset = luxOffset
 }
