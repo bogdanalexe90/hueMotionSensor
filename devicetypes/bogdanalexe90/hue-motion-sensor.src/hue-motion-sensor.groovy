@@ -28,18 +28,24 @@ metadata {
 		capability "Sensor"
         capability "Health Check"
 
-		fingerprint profileId: "0104", inClusters: "0000,0001,0003,0406,0400,0402,0500", outClusters: "0019", manufacturer: "Philips", model: "SML001", deviceJoinName: "Hue Motion Sensor"
+		fingerprint profileId: "0104", inClusters: "0000,0001,0003,0400,0402,0406", outClusters: "0019", manufacturer: "Philips", model: "SML001", deviceJoinName: "Hue Motion Sensor"
 	}
     
     preferences {
-		section {
-			input title: "Temperature Offset", description: "This feature allows you to correct any temperature variations by selecting an offset. Ex: If your sensor consistently reports a temp that's 5 degrees too warm, you'd enter '-5'. If 3 degrees too cold, enter '+3'.", displayDuringSetup: false, type: "paragraph", element: "paragraph"
-			input "tempOffset", "decimal", title: "Degrees", description: "Adjust temperature by this many degrees", range: "*..*", displayDuringSetup: false
+	    section {
+			input "motionDuration", "number", title: "Motion duration in seconds", description: "Default value is 10s",  range: "10..*", displayDuringSetup: false
 		}
         
         section {
-			input title: "illuminance Offset", description: "This feature allows you to correct any illuminance variations by selecting an offset. Ex: If your sensor consistently reports a illuminance that's 5lux too high, you'd enter '-5'. If 3lux too low, enter '+3'.", displayDuringSetup: false, type: "paragraph", element: "paragraph"
-			input "luxOffset", "number", title: "Lux", description: "Adjust illuminance by this many lux", range: "*..*", displayDuringSetup: false
+			input "motionSensitivity", "enum", title: "Motion Sensitivity", options: ["Low", "Medium", "High"], displayDuringSetup: false, defaultValue: "High"
+		}
+        
+		section {
+			input "tempOffset", "decimal", title: "Temperature Offset", description: "Offset temperature by this many degrees", range: "*..*", displayDuringSetup: false
+		}
+        
+        section {
+			input "luxOffset", "number", title: "Illuminance Offset", description: "Offset illuminance by this many lux", range: "*..*", displayDuringSetup: false
 		}
 	}
 
@@ -51,7 +57,7 @@ metadata {
 			}
 		}
         
-        valueTile("temperature", "device.temperature", width: 2, height: 2) {
+        valueTile("temperature", "device.temperature", inactiveLabel: false, width: 2, height: 2) {
 			state("temperature", label: '${currentValue}°', unit: 'dF',
 					backgroundColors: [
 							[value: 31, color: "#153591"],
@@ -66,14 +72,19 @@ metadata {
 		}
        
         valueTile("illuminance", "device.illuminance", inactiveLabel: false, width: 2, height: 2) {
-			state "luminosity", label:'${currentValue} lux', unit:"lux"
+			state "luminosity", label:'${currentValue} lux', unit:"lux", 
+            		backgroundColors:[
+                            [value: 9, color: "#767676"],
+                            [value: 315, color: "#ffa81e"],
+                            [value: 1000, color: "#fbd41b"]
+					]
 		}
         
-        valueTile("battery", "device.battery", decoration: "flat", inactiveLabel: false, width: 2, height: 2) {
+        valueTile("battery", "device.battery", inactiveLabel: false, width: 2, height: 2, decoration: "flat") {
 			state "battery", label: '${currentValue}% battery', unit: ""
 		}
         
-		standardTile("refresh", "device.refresh", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
+		standardTile("refresh", "device.refresh", inactiveLabel: false, width: 2, height: 2, decoration: "flat") {
 			state "default", action: "refresh.refresh", icon: "st.secondary.refresh"
 		}
 
@@ -143,21 +154,14 @@ private Map getTemperatureResultEvent(BigDecimal newTemp) {
 }
 
 private Map getLuminanceResultEvent(Integer newIlluminance) {
-	def lastMotionEvent = device.currentState("motion").date.getTime()
-	def timeSinceLastMotion = ((new Date()).getTime() - lastMotionEvent) / 1000
     newIlluminance = zigbee.lux(newIlluminance)
-    
-    if (timeSinceLastMotion < 1.5) {
-    	log.debug "Skiping update illuminance value: $newIlluminance - Time since last motion event: $timeSinceLastMotion sec"
-    	return [:]
-    }
-    
+
     // Apply configured offset
     if (luxOffset) {
     	newIlluminance = newIlluminance + (luxOffset as Integer)
     }
 
-	log.debug "Updating illuminance value: $newIlluminance - Time since last motion event: $timeSinceLastMotion sec"
+	log.debug "Updating illuminance value: $newIlluminance"
     
 	return createEvent([
         name: "illuminance",
@@ -179,18 +183,23 @@ private Map getMotionResultEvent(String newMotionAction) {
 	])
 }
 
-private convertZoneStatusToMotionResult (ZoneStatus zs) {
-	getMotionResultEvent((zs.isAlarm1Set() || zs.isAlarm2Set()) ? "active" : "inactive") 
+private Integer convertMotionSensitivityToInt (String sensitivity) {
+    if (sensitivity == "Low") {
+        return 0
+    }
+
+    if (sensitivity == "Medium") {
+        return 1
+    }
+    
+    // High
+    return 2
 }
 
 
 def parse(String description) {
     log.info "Parse description: $description"
-    
-    if (description?.startsWith("zone status")) {
-    	return convertZoneStatusToMotionResult(zigbee.parseZoneStatus(description))
-    }
-    
+        
 	if (description?.startsWith("temperature")) {
     	return getTemperatureResultEvent((description - "temperature: ") as BigDecimal)
     }
@@ -212,11 +221,11 @@ def parse(String description) {
         // Temperature event
         case zigbee.TEMPERATURE_MEASUREMENT_CLUSTER:
         	if (descMap.commandInt == 0x07) {
-            	if (descMap.data[0] == "00") {
+            	if (descMap.data?.first() == "00") {
 					log.debug "Temperature reporting config response: $descMap"
                     sendEvent(name: "checkInterval", value: 60 * 12, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
 				} else {
-					log.warn "Temperature reporting config failed - error code: ${descMap.data[0]}"
+					log.warn "Temperature reporting config failed - error code: ${descMap.data?.first()}"
 				}
             } else if (descMap.value) { 
             	return getTemperatureResultEvent(zigbee.convertHexToInt(descMap.value) / 100)
@@ -226,28 +235,30 @@ def parse(String description) {
         // Illuminance event
         case 0x0400:
         	if (descMap.commandInt == 0x07) {
-            	if (descMap.data[0] == "00") {
+            	if (descMap.data?.first() == "00") {
 					log.debug "Illuminance reporting config response: $descMap"
                     sendEvent(name: "checkInterval", value: 60 * 12, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
 				} else {
-					log.warn "Illuminance reporting config failed - error code: ${descMap.data[0]}"
+					log.warn "Illuminance reporting config failed - error code: ${descMap.data?.first()}"
 				}
             } else {
             	return getLuminanceResultEvent(descMap.value ? zigbee.convertHexToInt(descMap.value) : 0)
             }         
         break;
-        
-        // Zone status event
-        case zigbee.IAS_ZONE_CLUSTER:
-        	if (descMap.attrInt == zigbee.ATTRIBUTE_IAS_ZONE_STATUS && descMap.value) {
-	            return convertZoneStatusToMotionResult(new ZoneStatus(zigbee.convertToInt(descMap.value))) 
-            }
-        break
-        
+     
         // Motion event
-        case 0x0406:
-        	if (descMap.attrInt == 0x0000) {
-				return getMotionResultEvent(descMap.value?.endsWith("01") ? "active" : "inactive")
+        case 0x0406:  
+            if (descMap.commandInt == 0x04) {
+	            if (descMap.data?.first() == "00") {
+            		log.debug "Motion sensor config response: $descMap"
+                	sendEvent(name: "checkInterval", value: 60 * 12, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
+                } else {
+                	log.warn "Motion sensor config failed - error code: ${descMap.data?.first()}"
+                }
+            }
+            
+            if (descMap.attrInt == 0x0000) {
+				return getMotionResultEvent(descMap.value == "01" ? "active" : "inactive")
             }       
         break;
     }
@@ -267,12 +278,17 @@ def refresh() {
 	log.info "### Refresh"
 	def refreshCmds = []
 
-	refreshCmds += zigbee.readAttribute(zigbee.POWER_CONFIGURATION_CLUSTER, 0x0020) +
-    	zigbee.readAttribute(zigbee.TEMPERATURE_MEASUREMENT_CLUSTER, 0x0000) +
-		zigbee.readAttribute(zigbee.IAS_ZONE_CLUSTER, zigbee.ATTRIBUTE_IAS_ZONE_STATUS) +
-        zigbee.readAttribute(0x0406, 0x0000) +
-		zigbee.readAttribute(0x0400, 0x0000) +
-		zigbee.enrollResponse()
+	// Battery
+	refreshCmds += zigbee.readAttribute(zigbee.POWER_CONFIGURATION_CLUSTER, 0x0020)
+    // Temp
+    refreshCmds += 	zigbee.readAttribute(zigbee.TEMPERATURE_MEASUREMENT_CLUSTER, 0x0000)
+    // Motion
+	refreshCmds += 	zigbee.readAttribute(zigbee.IAS_ZONE_CLUSTER, zigbee.ATTRIBUTE_IAS_ZONE_STATUS)
+    refreshCmds +=  zigbee.readAttribute(0x0406, 0x0000)
+    
+    // Illuminance
+	refreshCmds += 	zigbee.readAttribute(0x0400, 0x0000)
+	refreshCmds += 	zigbee.enrollResponse()
 
 	return refreshCmds
 }
@@ -285,13 +301,51 @@ def configure() {
 	// enrolls with default periodic reporting until newer 5 min interval is confirmed
 	sendEvent(name: "checkInterval", value: 2 * 60 * 60 + 1 * 60, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
 
-	// reporting interval if no activity
-	// temperature - minReportTime 10 seconds, maxReportTime 5 min
-    // illuminance - minReportTime 5 seconds, maxReportTime 5 min
-	// battery - minReport 30 seconds, maxReportTime 6 hrs by default    
+	// Configure reporting interval if no activity
+	//    - temperature - minReportTime 10 seconds, maxReportTime 5 min
+    //    - illuminance - minReportTime 5 seconds, maxReportTime 5 min
+	//    - battery - minReport 30 seconds, maxReportTime 6 hrs by default    
 	configCmds += zigbee.temperatureConfig(30, 300)
-    configCmds += zigbee.configureReporting(0x0400, 0x0000, DataType.UINT16, 5, 300, 100)
+    configCmds += zigbee.configureReporting(0x0400, 0x0000, DataType.UINT16, 5, 300, 0x0064)
     configCmds += zigbee.batteryConfig()
+    configCmds += zigbee.iasZoneConfig()
+    
+    // Cofigure motion sensitivity to `High` and duration to default
+    configCmds += zigbee.writeAttribute(0x0406, 0x0010, DataType.UINT16, 0)
+    configCmds += zigbee.writeAttribute(0x0406, 0x0030, DataType.UINT8, convertMotionSensitivityToInt("High"), [mfgCode: 0x100b])
 
 	return refresh() + configCmds + refresh() // send refresh cmd as part of config
+}
+
+def updated () {
+	log.info "### Updated"
+   
+    // Configure motion duration
+    if (state.lastMotionDuration != motionDuration) {
+    	log.debug "Updating motion duration - $motionDuration sec"
+    	sendHubCommand(zigbee.writeAttribute(0x0406, 0x0010, DataType.UINT16, motionDuration ?: 0).collect{new physicalgraph.device.HubAction(it)}) 
+    }
+    
+    // Configure motion sensitivity
+    if (state.lastMotionSensitivity != motionSensitivity) {
+    	log.debug "Updating motion sensitivity - $motionSensitivity"
+	    sendHubCommand(zigbee.writeAttribute(0x0406, 0x0030, DataType.UINT8, convertMotionSensitivityToInt(motionSensitivity), [mfgCode: 0x100b]).collect{new physicalgraph.device.HubAction(it)}) 
+    }
+    
+    // Update temp
+    if (state.lastTempOffset != lastTempOffset) {
+    	log.debug "Updating temperature"
+    	sendHubCommand(zigbee.readAttribute(zigbee.TEMPERATURE_MEASUREMENT_CLUSTER, 0x0000).collect{new physicalgraph.device.HubAction(it)})
+	}
+
+	// Update lux
+    if (state.lastLuxOffset != luxOffset) {
+    	log.debug "Updating illuminance"
+    	sendHubCommand(zigbee.readAttribute(0x0400, 0x0000).collect{new physicalgraph.device.HubAction(it)}, 0)
+    }
+    
+    state.lastMotionDuration = motionDuration
+    state.lastMotionSensitivity = motionSensitivity
+    state.lastTempOffset = tempOffset
+    state.lastLuxOffset = luxOffset
 }
