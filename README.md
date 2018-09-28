@@ -3,11 +3,15 @@
 **Motion:**
 Very snappy, works better than original smartthings motion sensor (even if the DTH runs in the cloud) having no delay or sleep time for reporting the motion events.
 
+Also you can configure the following:
+* Motion duration in sec (duration between active and inactive events). Default is 10 sec (comming from the sensor)
+* Motion sensitivity (Low, Medium, High). Default is High
+
 **Temperature:**
-It's accurate and reported in time.
+It's accurate and reported in time. You can also correct the readings by configuring an offset.
 
 **Illuminance:**
-Since the sensor reads a faulty value right after the motion is reported, any illuminance measurements right after a motion event (less than 1.5 sec) will be ignored.
+It's accurate and reported in time. You can also correct the readings by configuring an offset.
 
 **Battery:**
 Used the same logic as the smartthings motion sensor. Seems accurate.
