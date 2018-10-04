@@ -270,15 +270,7 @@ def parse(String description) {
             
             if (descMap.attrInt == 0x0000) {
 				return getMotionResultEvent(descMap.value == "01" ? "active" : "inactive")
-            }  
-            
-            if (descMap.attrInt == 0x0010) {
-				log.info "Motion duration is ${zigbee.convertHexToInt(descMap.value)} sec"
-            }  
-            
-            if (descMap.attrInt == 0x0030) {
-				log.info "Motion sensitivity is ${convertIntToMotionSensitivity(zigbee.convertHexToInt(descMap.value))}"
-            }       
+            }        
         break;
     }
     
@@ -300,8 +292,6 @@ def refresh() {
 	refreshCmds += zigbee.readAttribute(zigbee.POWER_CONFIGURATION_CLUSTER, 0x0020)
     refreshCmds += zigbee.readAttribute(zigbee.TEMPERATURE_MEASUREMENT_CLUSTER, 0x0000)
     refreshCmds += zigbee.readAttribute(0x0406, 0x0000)
-	refreshCmds += zigbee.readAttribute(0x0406, 0x0010)
-    refreshCmds += zigbee.readAttribute(0x0406, 0x0030, [mfgCode: 0x100b])
 	refreshCmds += zigbee.readAttribute(0x0400, 0x0000)
 	refreshCmds += zigbee.enrollResponse()
 
@@ -322,7 +312,7 @@ def configure() {
 	//    - battery - minReport 30 seconds, maxReportTime 6 hrs by default    
 	configCmds += zigbee.temperatureConfig(30, 300)
     configCmds += zigbee.configureReporting(0x0406, 0x0000, DataType.BITMAP8, 0, 300, null)
-    configCmds += zigbee.configureReporting(0x0400, 0x0000, DataType.UINT16, 5, 300, 0x0064)
+    configCmds += zigbee.configureReporting(0x0400, 0x0000, DataType.UINT16, 0, 300, 10)
     configCmds += zigbee.batteryConfig()
     // Cofigure motion sensitivity to `High` and duration to default
     configCmds += zigbee.writeAttribute(0x0406, 0x0010, DataType.UINT16, 0)
