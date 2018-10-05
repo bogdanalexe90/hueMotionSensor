@@ -273,14 +273,14 @@ def configure() {
 	sendEvent(name: "checkInterval", value: 2 * 60 * 60 + 1 * 60, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
 	
     // Configure reporting interval if no activity
-    //    - motion - minReportTime 0 seconds, maxReportTime 2 min
-	//    - illuminance - minReportTime 0 seconds, maxReportTime 10 min
-    //    - temperature - minReportTime 0 seconds, maxReportTime 10 min
+    //    - motion - minReportTime 0 seconds, maxReportTime 30 sec
+	//    - illuminance - minReportTime 0 seconds, maxReportTime 30 sec
+    //    - temperature - minReportTime 0 seconds, maxReportTime 2 min
 	//    - battery - minReport 30 seconds, maxReportTime 6 hrs by default  
     def configCmds = [
-	    zigbee.configureReporting(MOTION_ALERT_CLUSTER, MOTION_ALERT_VALUE, DataType.BITMAP8, 0, 120, null),
-	    zigbee.configureReporting(ILLUMINANCE_MEASUREMENT_CLUSTER, ILLUMINANCE_MEASURE_VALUE, DataType.UINT16, 0, 600, 100),
-        zigbee.temperatureConfig(0, 600, 1),
+	    zigbee.configureReporting(MOTION_ALERT_CLUSTER, MOTION_ALERT_VALUE, DataType.BITMAP8, 0, 30, null),
+	    zigbee.configureReporting(ILLUMINANCE_MEASUREMENT_CLUSTER, ILLUMINANCE_MEASURE_VALUE, DataType.UINT16, 0, 30, 100),
+        zigbee.temperatureConfig(0, 120, 1),
         zigbee.batteryConfig(),
     ]
     
