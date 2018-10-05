@@ -105,7 +105,7 @@ private Map getBatteryResultEvent(BigDecimal newVolts) {
     
     BigDecimal newBatteryPercent = ((newVolts - minVolts) / (maxVolts - minVolts)) * 100
     newBatteryPercent = (newBatteryPercent.min(100)).max(1)
-    newBatteryPercent = newBatteryPercent.setScale(1, BigDecimal.ROUND_HALF_UP)
+    newBatteryPercent = newBatteryPercent.setScale(0, BigDecimal.ROUND_HALF_UP)
     
     log.debug "Updating battery value: $newBatteryPercent"
     
