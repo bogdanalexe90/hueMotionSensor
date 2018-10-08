@@ -178,6 +178,10 @@ private Integer convertMotionSensitivityToInt (String sensitivity) {
     return 2
 }
 
+private sendCheckIntervalEvent(Integer intervalValue = 720){
+	sendEvent(name: "checkInterval", value: intervalValue, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
+}
+
 
 Map parse(String description) {
     log.info "Parse description: $description"
@@ -205,7 +209,7 @@ Map parse(String description) {
         	if (descMap.commandInt == 0x07) {
             	if (descMap.data?.first() == "00") {
 					log.debug "Temperature reporting config response: $descMap"
-                    sendEvent(name: "checkInterval", value: 60 * 12, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
+                    sendCheckIntervalEvent()
 				} else {
 					log.warn "Temperature reporting config failed - error code: ${descMap.data?.first()}"
 				}
@@ -219,7 +223,7 @@ Map parse(String description) {
         	if (descMap.commandInt == 0x07) {
             	if (descMap.data?.first() == "00") {
 					log.debug "Illuminance reporting config response: $descMap"
-                    sendEvent(name: "checkInterval", value: 60 * 12, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
+                    sendCheckIntervalEvent()
 				} else {
 					log.warn "Illuminance reporting config failed - error code: ${descMap.data?.first()}"
 				}
@@ -230,13 +234,13 @@ Map parse(String description) {
      
         // Motion event
         case MOTION_ALERT_CLUSTER:  
-            if (descMap.commandInt == 0x04) {
-	            if (descMap.data?.first() == "00") {
-            		log.debug "Motion sensor sensitivity config response: $descMap"
-                	sendEvent(name: "checkInterval", value: 60 * 12, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
-                } else {
-                	log.warn "Motion sensor sensitivity config failed - error code: ${descMap.data?.first()}"
-                }
+            if (descMap.commandInt == 0x07) {
+            	if (descMap.data?.first() == "00") {
+					log.debug "Motion reporting config response: $descMap"
+                    sendCheckIntervalEvent()
+				} else {
+					log.warn "Motion reporting config failed - error code: ${descMap.data?.first()}"
+				}
             } else if (descMap.attrInt == MOTION_ALERT_VALUE && descMap.value) {
 				return getMotionResultEvent(descMap.value == "01" ? "active" : "inactive")
             }
@@ -270,22 +274,19 @@ def configure() {
 	
     // Device-Watch allows 2 check-in misses from device + ping (plus 1 min lag time)
 	// enrolls with default periodic reporting until newer 5 min interval is confirmed
-	sendEvent(name: "checkInterval", value: 2 * 60 * 60 + 1 * 60, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
-	
-    // Configure reporting interval if no activity
-    //    - motion - minReportTime 0 seconds, maxReportTime 30 sec
-	//    - illuminance - minReportTime 0 seconds, maxReportTime 30 sec
-    //    - temperature - minReportTime 0 seconds, maxReportTime 2 min
-	//    - battery - minReport 30 seconds, maxReportTime 6 hrs by default  
-    def configCmds = [
-	    zigbee.configureReporting(MOTION_ALERT_CLUSTER, MOTION_ALERT_VALUE, DataType.BITMAP8, 0, 30, null),
-	    zigbee.configureReporting(ILLUMINANCE_MEASUREMENT_CLUSTER, ILLUMINANCE_MEASURE_VALUE, DataType.UINT16, 0, 30, 100),
-        zigbee.temperatureConfig(0, 120, 1),
-        zigbee.batteryConfig(),
-    ]
+	sendCheckIntervalEvent(2 * 60 * 60 + 1 * 60)
     
-    // Remember default motion sensitivity
-    state.lastMotionSensitivity = "High"
+    // Configure reporting interval if no activity
+    //    - motion - minReportTime 1 seconds, maxReportTime 5 min
+	//    - illuminance - minReportTime 5 seconds, maxReportTime 5 min 
+    //    - temperature - minReportTime 10 seconds, maxReportTime 5 min
+	//    - battery - minReport 120 min, maxReportTime 120 min 
+    def configCmds = [
+	    zigbee.configureReporting(MOTION_ALERT_CLUSTER, MOTION_ALERT_VALUE, DataType.BITMAP8, 1, 300, null),
+	    zigbee.configureReporting(ILLUMINANCE_MEASUREMENT_CLUSTER, ILLUMINANCE_MEASURE_VALUE, DataType.UINT16, 5, 300, 1000),
+        zigbee.temperatureConfig(10, 300, 2),
+        zigbee.batteryConfig(7200, 7200, 0)
+    ]
     
 	return configCmds + refresh()
 }
@@ -293,9 +294,10 @@ def configure() {
 def updated () {
 	log.info "### Updated"
     def motionSensitivityValue = motionSensitivity ?: "High"
+    def lastMotionSensitivityValue = state.lastMotionSensitivity ?: "High"
     
     // Configure motion sensitivity
-    if (state.lastMotionSensitivity != motionSensitivityValue) {
+    if (lastMotionSensitivityValue != motionSensitivityValue) {
     	log.debug "Updating motion sensitivity - $motionSensitivityValue"
 	    sendHubCommand(zigbee.writeAttribute(MOTION_ALERT_CLUSTER, MOTION_SENSITIVITY_VALUE, DataType.UINT8, convertMotionSensitivityToInt(motionSensitivityValue), [mfgCode: 0x100b]).collect{new physicalgraph.device.HubAction(it)}) 
     }
@@ -312,7 +314,7 @@ def updated () {
     	sendHubCommand(zigbee.readAttribute(ILLUMINANCE_MEASUREMENT_CLUSTER, ILLUMINANCE_MEASURE_VALUE).collect{new physicalgraph.device.HubAction(it)}, 0)
     }
     
-    state.lastMotionSensitivity = motionSensitivityValue
+    state.lastMotionSensitivity = motionSensitivity
     state.lastTempOffset = tempOffset
     state.lastLuxOffset = luxOffset
 }
