@@ -16,7 +16,7 @@
 import physicalgraph.zigbee.zcl.DataType
  
 metadata {
-    definition (name: "Hue Motion Sensor", namespace: "bogdanalexe90", author: "Bogdan Alexe", , mnmn: "SmartThings", vid: "generic-motion", ocfDeviceType: "oic.r.sensor.motion") {
+    definition (name: "Hue Motion Sensor", namespace: "bogdanalexe90", author: "Bogdan Alexe", vid: "generic-motion", ocfDeviceType: "x.com.st.d.sensor.motion") {
 		capability "Motion Sensor"
 		capability "Configuration"
 		capability "Battery"
