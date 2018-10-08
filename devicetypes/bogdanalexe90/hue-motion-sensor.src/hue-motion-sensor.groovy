@@ -284,7 +284,7 @@ def configure() {
     def configCmds = [
 	    zigbee.configureReporting(MOTION_ALERT_CLUSTER, MOTION_ALERT_VALUE, DataType.BITMAP8, 1, 300, null),
 	    zigbee.configureReporting(ILLUMINANCE_MEASUREMENT_CLUSTER, ILLUMINANCE_MEASURE_VALUE, DataType.UINT16, 5, 300, 1000),
-        zigbee.temperatureConfig(10, 300, 2),
+        zigbee.temperatureConfig(10, 300, 5),
         zigbee.batteryConfig(7200, 7200, 0)
     ]
     
