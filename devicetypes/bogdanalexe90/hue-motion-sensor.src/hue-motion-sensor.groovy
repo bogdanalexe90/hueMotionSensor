@@ -183,7 +183,7 @@ private Integer convertMotionSensitivityToInt (String sensitivity) {
 }
 
 private sendCheckIntervalEvent(Integer intervalValue = 720){
-	sendEvent(name: "checkInterval", value: intervalValue, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
+	sendEvent(name: "checkInterval", value: intervalValue, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID])
 }
 
 
@@ -259,7 +259,7 @@ Map parse(String description) {
  * */
 def ping() {
 	log.info "### Ping"
-	zigbee.readAttribute(zigbee.IAS_ZONE_CLUSTER, zigbee.ATTRIBUTE_IAS_ZONE_STATUS)
+	zigbee.readAttribute(zigbee.POWER_CONFIGURATION_CLUSTER, zigbee.BATTERY_MEASURE_VALUE)
 }
 
 def refresh() {
@@ -305,17 +305,10 @@ def updated () {
     	log.debug "Updating motion sensitivity - $motionSensitivityValue"
 	    sendHubCommand(zigbee.writeAttribute(MOTION_ALERT_CLUSTER, MOTION_SENSITIVITY_VALUE, DataType.UINT8, convertMotionSensitivityToInt(motionSensitivityValue), [mfgCode: 0x100b]).collect{new physicalgraph.device.HubAction(it)}) 
     }
-    
-    // Update temperature
-    if (state.lastTempOffset != lastTempOffset) {
-    	log.debug "Updating temperature"
-    	sendHubCommand(zigbee.readAttribute(zigbee.TEMPERATURE_MEASUREMENT_CLUSTER, TEMPERATURE_MEASURE_VALUE).collect{new physicalgraph.device.HubAction(it)})
-	}
-
-	// Update illuminance
-    if (state.lastLuxOffset != luxOffset) {
-    	log.debug "Updating illuminance"
-    	sendHubCommand(zigbee.readAttribute(ILLUMINANCE_MEASUREMENT_CLUSTER, ILLUMINANCE_MEASURE_VALUE).collect{new physicalgraph.device.HubAction(it)}, 0)
+   
+	// Update illuminance & temperature     
+    if (state.lastTempOffset != lastTempOffset || state.lastLuxOffset != luxOffset) {
+	    sendHubCommand(refresh().collect { new physicalgraph.device.HubAction(it) }, 0)
     }
     
     state.lastMotionSensitivity = motionSensitivity
