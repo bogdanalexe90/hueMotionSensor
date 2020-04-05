@@ -1,7 +1,7 @@
 /**
  *  Hue Motion Sensor
  *
- *  Copyright 2018 Bogdan Alexe
+ *  Copyright 2020 Bogdan Alexe
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -12,11 +12,12 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
+ *  This DTH has been updated to support illuminance in the new Smartthings app by @ilGianfri.
  */
 import physicalgraph.zigbee.zcl.DataType
  
 metadata {
-    definition (name: "Hue Motion Sensor", namespace: "bogdanalexe90", author: "Bogdan Alexe", vid: "generic-motion", ocfDeviceType: "x.com.st.d.sensor.motion") {
+    definition (name: "Hue Motion Sensor", namespace: "bogdanalexe90", author: "Bogdan Alexe", vid: "generic-motion-4", ocfDeviceType: "x.com.st.d.sensor.motion") {
 		capability "Motion Sensor"
 		capability "Configuration"
 		capability "Battery"
@@ -73,9 +74,18 @@ metadata {
                 ]
 			)
 		}
-       
-        valueTile("illuminance", "device.illuminance", width: 2, height: 2, decoration: "flat") {
-			state "luminosity", label:'${currentValue} lux', unit:"lux"
+        
+        valueTile("illuminance", "device.illuminance", width: 2, height: 2) {
+			state "luminosity", label: '${currentValue} lux', unit: 'lux', 
+            backgroundColors: [
+					[value: 40, color: "#999900"],
+					[value: 100, color: "#CCCC00"],
+					[value: 300, color: "#FFFF00"],
+					[value: 500, color: "#FFFF33"],
+					[value: 1000, color: "#FFFF66"],
+					[value: 2000, color: "#FFFF99"],
+					[value: 10000, color: "#FFFFCC"]
+			]
 		}
         
         valueTile("battery", "device.battery", width: 2, height: 2, decoration: "flat") {
